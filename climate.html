@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Climate Trends Explorer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<h1>Climate Trends Explorer</h1>
+
+<label>Latitude:</label>
+<input id="lat" value="24.5">
+
+<label>Longitude:</label>
+<input id="lon" value="121.0">
+
+<button onclick="loadData()">Load Climate Data</button>
+
+<div id="output"></div>
+
+<canvas id="tempChart"></canvas>
+<canvas id="rainChart"></canvas>
+
+<script>
+
+let tempChart;
+let rainChart;
+
+function linearRegression(x, y) {
+    const n = x.length;
+
+    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+
+    for (let i = 0; i < n; i++) {
+        sumX += x[i];
+        sumY += y[i];
+        sumXY += x[i] * y[i];
+        sumXX += x[i] * x[i];
+    }
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    return {
+        slope,
+        trend: x.map(xi => slope * xi + intercept)
+    };
+}
+
+function interpret(type, slope) {
+    if (type === "temperature") {
+        if (slope > 0) {
+            return `🔥 Warming trend: +${slope.toFixed(4)} °C/year`;
+        } else {
+            return `❄️ Cooling trend: ${slope.toFixed(4)} °C/year`;
+        }
+    }
+
+    if (type === "rainfall") {
+        if (slope > 0) {
+            return `🌧️ Increasing rainfall: +${slope.toFixed(2)} mm/year`;
+        } else {
+            return `🏜️ Decreasing rainfall: ${slope.toFixed(2)} mm/year`;
+        }
+    }
+}
+
+function loadData() {
+
+    const lat = document.getElementById("lat").value;
+    const lon = document.getElementById("lon").value;
+
+    fetch(`https://climate-app-e1fc.onrender.com`)
+    .then(res => res.json())
+    .then(data => {
+
+        const years = Object.keys(data.temperature_trend).map(Number);
+
+        const temps = Object.values(data.temperature_trend);
+        const rains = Object.values(data.rainfall_trend);
+
+        const tempRes = linearRegression(years, temps);
+        const rainRes = linearRegression(years, rains);
+
+        if (tempChart) tempChart.destroy();
+        if (rainChart) rainChart.destroy();
+
+        // TEMPERATURE
+        tempChart = new Chart(document.getElementById('tempChart'), {
+            type: 'line',
+            data: {
+                labels: years,
+                datasets: [
+                    {
+                        label: 'Temperature',
+                        data: temps,
+                        borderColor: 'red',
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Trend',
+                        data: tempRes.trend,
+                        borderColor: 'black',
+                        borderWidth: 3,
+                        pointRadius: 0
+                    }
+                ]
+            }
+        });
+
+        // RAINFALL
+        rainChart = new Chart(document.getElementById('rainChart'), {
+            type: 'line',
+            data: {
+                labels: years,
+                datasets: [
+                    {
+                        label: 'Rainfall',
+                        data: rains,
+                        borderColor: 'blue',
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Trend',
+                        data: rainRes.trend,
+                        borderColor: 'black',
+                        borderWidth: 3,
+                        pointRadius: 0
+                    }
+                ]
+            }
+        });
+
+        // INTERPRETATION TEXT
+        const tempText = interpret("temperature", tempRes.slope);
+        const rainText = interpret("rainfall", rainRes.slope);
+
+        document.getElementById("output").innerHTML = `
+            <h2>Climate Interpretation</h2>
+            <p>${tempText}</p>
+            <p>${rainText}</p>
+        `;
+
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Error: " + err.message);
+    });
+}
+
+</script>
+
+</body>
+</html>
