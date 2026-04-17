@@ -28,7 +28,6 @@ let tempChart;
 let rainChart;
 let extremeChart;
 
-/* ---------------- regression ---------------- */
 function linearRegression(x, y) {
     const n = x.length;
 
@@ -50,7 +49,6 @@ function linearRegression(x, y) {
     };
 }
 
-/* ---------------- interpretation ---------------- */
 function interpret(type, slope) {
 
     if (type === "temperature") {
@@ -72,7 +70,6 @@ function interpret(type, slope) {
     }
 }
 
-/* ---------------- main ---------------- */
 function loadData() {
 
     const lat = document.getElementById("lat").value;
@@ -83,8 +80,6 @@ function loadData() {
     fetch(url)
     .then(res => res.json())
     .then(data => {
-
-        console.log(data);
 
         if (!data || !data.temperature_mean) {
             alert("No data returned");
@@ -107,88 +102,41 @@ function loadData() {
         if (rainChart) rainChart.destroy();
         if (extremeChart) extremeChart.destroy();
 
-        /* ---------------- TEMPERATURE ---------------- */
         tempChart = new Chart(document.getElementById('tempChart'), {
             type: 'line',
             data: {
                 labels: years,
                 datasets: [
-                    {
-                        label: 'Mean Temperature',
-                        data: tempMean,
-                        borderColor: 'red',
-                        pointRadius: 2
-                    },
-                    {
-                        label: 'Max Temperature',
-                        data: tempMax,
-                        borderColor: 'orange',
-                        pointRadius: 2
-                    },
-                    {
-                        label: 'Trend',
-                        data: tempRes.trend,
-                        borderColor: 'black',
-                        borderWidth: 2,
-                        pointRadius: 0
-                    }
+                    { label: 'Mean Temp', data: tempMean, borderColor: 'red' },
+                    { label: 'Max Temp', data: tempMax, borderColor: 'orange' },
+                    { label: 'Trend', data: tempRes.trend, borderColor: 'black', borderWidth: 2 }
                 ]
             }
         });
 
-        /* ---------------- RAIN ---------------- */
         rainChart = new Chart(document.getElementById('rainChart'), {
             type: 'line',
             data: {
                 labels: years,
                 datasets: [
-                    {
-                        label: 'Rainfall',
-                        data: rains,
-                        borderColor: 'blue',
-                        pointRadius: 2
-                    },
-                    {
-                        label: 'Soil Moisture',
-                        data: soil,
-                        borderColor: 'green',
-                        pointRadius: 2
-                    },
-                    {
-                        label: 'Trend',
-                        data: rainRes.trend,
-                        borderColor: 'black',
-                        borderWidth: 2,
-                        pointRadius: 0
-                    }
+                    { label: 'Rainfall', data: rains, borderColor: 'blue' },
+                    { label: 'Soil Moisture', data: soil, borderColor: 'green' },
+                    { label: 'Trend', data: rainRes.trend, borderColor: 'black', borderWidth: 2 }
                 ]
             }
         });
 
-        /* ---------------- EXTREMES ---------------- */
         extremeChart = new Chart(document.getElementById('extremeChart'), {
             type: 'line',
             data: {
                 labels: years,
                 datasets: [
-                    {
-                        label: 'Hot Days (>35°C)',
-                        data: hotDays,
-                        borderColor: 'purple',
-                        pointRadius: 2
-                    },
-                    {
-                        label: 'Trend',
-                        data: extremeRes.trend,
-                        borderColor: 'black',
-                        borderWidth: 2,
-                        pointRadius: 0
-                    }
+                    { label: 'Hot Days', data: hotDays, borderColor: 'purple' },
+                    { label: 'Trend', data: extremeRes.trend, borderColor: 'black', borderWidth: 2 }
                 ]
             }
         });
 
-        /* ---------------- TEXT ---------------- */
         document.getElementById("output").innerHTML = `
             <h2>Climate Interpretation</h2>
             <p>${interpret("temperature", tempRes.slope)}</p>
@@ -198,7 +146,6 @@ function loadData() {
 
     })
     .catch(err => {
-        console.error(err);
         alert("Error: " + err.message);
     });
 }
