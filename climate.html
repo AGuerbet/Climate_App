@@ -20,12 +20,15 @@
 
 <canvas id="tempChart"></canvas>
 <canvas id="rainChart"></canvas>
+<canvas id="extremeChart"></canvas>
 
 <script>
 
 let tempChart;
 let rainChart;
+let extremeChart;
 
+/* ---------------- regression ---------------- */
 function linearRegression(x, y) {
     const n = x.length;
 
@@ -47,68 +50,93 @@ function linearRegression(x, y) {
     };
 }
 
+/* ---------------- interpretation ---------------- */
 function interpret(type, slope) {
+
     if (type === "temperature") {
-        if (slope > 0) {
-            return `🔥 Warming trend: +${slope.toFixed(4)} °C/year`;
-        } else {
-            return `❄️ Cooling trend: ${slope.toFixed(4)} °C/year`;
-        }
+        return slope > 0
+            ? `🔥 Warming trend: +${slope.toFixed(4)} °C/year`
+            : `❄️ Cooling trend: ${slope.toFixed(4)} °C/year`;
     }
 
     if (type === "rainfall") {
-        if (slope > 0) {
-            return `🌧️ Increasing rainfall: +${slope.toFixed(2)} mm/year`;
-        } else {
-            return `🏜️ Decreasing rainfall: ${slope.toFixed(2)} mm/year`;
-        }
+        return slope > 0
+            ? `🌧️ Increasing rainfall: +${slope.toFixed(2)} mm/year`
+            : `🏜️ Decreasing rainfall: ${slope.toFixed(2)} mm/year`;
+    }
+
+    if (type === "extremes") {
+        return slope > 0
+            ? `⚠️ Increase in extreme heat days`
+            : `Decrease in extreme heat days`;
     }
 }
 
+/* ---------------- main ---------------- */
 function loadData() {
 
     const lat = document.getElementById("lat").value;
     const lon = document.getElementById("lon").value;
 
-    fetch(`https://climate-app-e1fc.onrender.com`)
+    const url = `https://climate-app-e1fc.onrender.com/climate-fast?lat=${lat}&lon=${lon}`;
+
+    fetch(url)
     .then(res => res.json())
     .then(data => {
 
-        const years = Object.keys(data.temperature_trend).map(Number);
+        console.log(data);
 
-        const temps = Object.values(data.temperature_trend);
-        const rains = Object.values(data.rainfall_trend);
+        if (!data || !data.temperature_mean) {
+            alert("No data returned");
+            return;
+        }
 
-        const tempRes = linearRegression(years, temps);
+        const years = Object.keys(data.temperature_mean).map(Number);
+
+        const tempMean = Object.values(data.temperature_mean);
+        const tempMax = Object.values(data.temperature_max);
+        const rains = Object.values(data.rainfall);
+        const soil = Object.values(data.soil_moisture);
+        const hotDays = Object.values(data.hot_days);
+
+        const tempRes = linearRegression(years, tempMean);
         const rainRes = linearRegression(years, rains);
+        const extremeRes = linearRegression(years, hotDays);
 
         if (tempChart) tempChart.destroy();
         if (rainChart) rainChart.destroy();
+        if (extremeChart) extremeChart.destroy();
 
-        // TEMPERATURE
+        /* ---------------- TEMPERATURE ---------------- */
         tempChart = new Chart(document.getElementById('tempChart'), {
             type: 'line',
             data: {
                 labels: years,
                 datasets: [
                     {
-                        label: 'Temperature',
-                        data: temps,
+                        label: 'Mean Temperature',
+                        data: tempMean,
                         borderColor: 'red',
-                        pointRadius: 3
+                        pointRadius: 2
+                    },
+                    {
+                        label: 'Max Temperature',
+                        data: tempMax,
+                        borderColor: 'orange',
+                        pointRadius: 2
                     },
                     {
                         label: 'Trend',
                         data: tempRes.trend,
                         borderColor: 'black',
-                        borderWidth: 3,
+                        borderWidth: 2,
                         pointRadius: 0
                     }
                 ]
             }
         });
 
-        // RAINFALL
+        /* ---------------- RAIN ---------------- */
         rainChart = new Chart(document.getElementById('rainChart'), {
             type: 'line',
             data: {
@@ -118,27 +146,54 @@ function loadData() {
                         label: 'Rainfall',
                         data: rains,
                         borderColor: 'blue',
-                        pointRadius: 3
+                        pointRadius: 2
+                    },
+                    {
+                        label: 'Soil Moisture',
+                        data: soil,
+                        borderColor: 'green',
+                        pointRadius: 2
                     },
                     {
                         label: 'Trend',
                         data: rainRes.trend,
                         borderColor: 'black',
-                        borderWidth: 3,
+                        borderWidth: 2,
                         pointRadius: 0
                     }
                 ]
             }
         });
 
-        // INTERPRETATION TEXT
-        const tempText = interpret("temperature", tempRes.slope);
-        const rainText = interpret("rainfall", rainRes.slope);
+        /* ---------------- EXTREMES ---------------- */
+        extremeChart = new Chart(document.getElementById('extremeChart'), {
+            type: 'line',
+            data: {
+                labels: years,
+                datasets: [
+                    {
+                        label: 'Hot Days (>35°C)',
+                        data: hotDays,
+                        borderColor: 'purple',
+                        pointRadius: 2
+                    },
+                    {
+                        label: 'Trend',
+                        data: extremeRes.trend,
+                        borderColor: 'black',
+                        borderWidth: 2,
+                        pointRadius: 0
+                    }
+                ]
+            }
+        });
 
+        /* ---------------- TEXT ---------------- */
         document.getElementById("output").innerHTML = `
             <h2>Climate Interpretation</h2>
-            <p>${tempText}</p>
-            <p>${rainText}</p>
+            <p>${interpret("temperature", tempRes.slope)}</p>
+            <p>${interpret("rainfall", rainRes.slope)}</p>
+            <p>${interpret("extremes", extremeRes.slope)}</p>
         `;
 
     })
