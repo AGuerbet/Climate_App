@@ -19,69 +19,64 @@
 <div id="output"></div>
 
 <canvas id="tempChart"></canvas>
-<canvas id="rainChart"></canvas>
-<canvas id="extremeChart"></canvas>
+<canvas id="hydroChart"></canvas>
+<canvas id="energyChart"></canvas>
 
 <script>
 
-let tempChart;
-let rainChart;
-let extremeChart;
+let tempChart, hydroChart, energyChart;
 
 function linearRegression(x, y) {
     const n = x.length;
+    let sumX=0, sumY=0, sumXY=0, sumXX=0;
 
-    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-
-    for (let i = 0; i < n; i++) {
-        sumX += x[i];
-        sumY += y[i];
-        sumXY += x[i] * y[i];
-        sumXX += x[i] * x[i];
+    for (let i=0;i<n;i++){
+        sumX+=x[i];
+        sumY+=y[i];
+        sumXY+=x[i]*y[i];
+        sumXX+=x[i]*x[i];
     }
 
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
+    const slope = (n*sumXY - sumX*sumY)/(n*sumXX - sumX*sumX);
+    const intercept = (sumY - slope*sumX)/n;
 
     return {
         slope,
-        trend: x.map(xi => slope * xi + intercept)
+        trend: x.map(xi => slope*xi + intercept)
     };
 }
 
-function interpret(type, slope) {
+function interpret(type, slope){
 
-    if (type === "temperature") {
-        return slope > 0
-            ? `🔥 Warming trend: +${slope.toFixed(4)} °C/year`
-            : `❄️ Cooling trend: ${slope.toFixed(4)} °C/year`;
+    if(type==="temperature"){
+        return slope>0
+            ? `🔥 Warming: +${slope.toFixed(4)} °C/year`
+            : `❄️ Cooling: ${slope.toFixed(4)} °C/year`;
     }
 
-    if (type === "rainfall") {
-        return slope > 0
-            ? `🌧️ Increasing rainfall: +${slope.toFixed(2)} mm/year`
-            : `🏜️ Decreasing rainfall: ${slope.toFixed(2)} mm/year`;
+    if(type==="rain"){
+        return slope>0
+            ? `🌧️ Increasing rainfall`
+            : `🏜️ Decreasing rainfall`;
     }
 
-    if (type === "extremes") {
-        return slope > 0
-            ? `⚠️ Increase in extreme heat days`
-            : `Decrease in extreme heat days`;
+    if(type==="energy"){
+        return slope>0
+            ? `☀️ Increasing solar energy`
+            : `Decreasing solar energy`;
     }
 }
 
-function loadData() {
+function loadData(){
 
     const lat = document.getElementById("lat").value;
     const lon = document.getElementById("lon").value;
 
-    const url = `https://climate-app-e1fc.onrender.com/climate-fast?lat=${lat}&lon=${lon}`;
+    fetch(`https://climate-app-e1fc.onrender.com/climate-fast?lat=${lat}&lon=${lon}`)
+    .then(res=>res.json())
+    .then(data=>{
 
-    fetch(url)
-    .then(res => res.json())
-    .then(data => {
-
-        if (!data || !data.temperature_mean) {
+        if(!data || !data.temperature_mean){
             alert("No data returned");
             return;
         }
@@ -90,63 +85,66 @@ function loadData() {
 
         const tempMean = Object.values(data.temperature_mean);
         const tempMax = Object.values(data.temperature_max);
-        const rains = Object.values(data.rainfall);
-        const soil = Object.values(data.soil_moisture);
-        const hotDays = Object.values(data.hot_days);
+        const tempMin = Object.values(data.temperature_min);
 
-        const tempRes = linearRegression(years, tempMean);
-        const rainRes = linearRegression(years, rains);
-        const extremeRes = linearRegression(years, hotDays);
+        const rain = Object.values(data.rainfall);
+        const humidity = Object.values(data.humidity);
+        const radiation = Object.values(data.radiation);
 
-        if (tempChart) tempChart.destroy();
-        if (rainChart) rainChart.destroy();
-        if (extremeChart) extremeChart.destroy();
+        const tempRes = linearRegression(years,tempMean);
+        const rainRes = linearRegression(years,rain);
+        const radRes = linearRegression(years,radiation);
 
-        tempChart = new Chart(document.getElementById('tempChart'), {
-            type: 'line',
-            data: {
-                labels: years,
-                datasets: [
-                    { label: 'Mean Temp', data: tempMean, borderColor: 'red' },
-                    { label: 'Max Temp', data: tempMax, borderColor: 'orange' },
-                    { label: 'Trend', data: tempRes.trend, borderColor: 'black', borderWidth: 2 }
+        if(tempChart) tempChart.destroy();
+        if(hydroChart) hydroChart.destroy();
+        if(energyChart) energyChart.destroy();
+
+        // TEMPERATURE
+        tempChart = new Chart(tempChart = document.getElementById('tempChart'),{
+            type:'line',
+            data:{
+                labels:years,
+                datasets:[
+                    {label:'Mean',data:tempMean,borderColor:'red'},
+                    {label:'Max',data:tempMax,borderColor:'orange'},
+                    {label:'Min',data:tempMin,borderColor:'blue'},
+                    {label:'Trend',data:tempRes.trend,borderColor:'black',borderWidth:2}
                 ]
             }
         });
 
-        rainChart = new Chart(document.getElementById('rainChart'), {
-            type: 'line',
-            data: {
-                labels: years,
-                datasets: [
-                    { label: 'Rainfall', data: rains, borderColor: 'blue' },
-                    { label: 'Soil Moisture', data: soil, borderColor: 'green' },
-                    { label: 'Trend', data: rainRes.trend, borderColor: 'black', borderWidth: 2 }
+        // HYDRO
+        hydroChart = new Chart(document.getElementById('hydroChart'),{
+            type:'line',
+            data:{
+                labels:years,
+                datasets:[
+                    {label:'Rainfall',data:rain,borderColor:'blue'},
+                    {label:'Humidity',data:humidity,borderColor:'green'},
+                    {label:'Trend',data:rainRes.trend,borderColor:'black',borderWidth:2}
                 ]
             }
         });
 
-        extremeChart = new Chart(document.getElementById('extremeChart'), {
-            type: 'line',
-            data: {
-                labels: years,
-                datasets: [
-                    { label: 'Hot Days', data: hotDays, borderColor: 'purple' },
-                    { label: 'Trend', data: extremeRes.trend, borderColor: 'black', borderWidth: 2 }
+        // ENERGY
+        energyChart = new Chart(document.getElementById('energyChart'),{
+            type:'line',
+            data:{
+                labels:years,
+                datasets:[
+                    {label:'Radiation',data:radiation,borderColor:'gold'},
+                    {label:'Trend',data:radRes.trend,borderColor:'black',borderWidth:2}
                 ]
             }
         });
 
         document.getElementById("output").innerHTML = `
             <h2>Climate Interpretation</h2>
-            <p>${interpret("temperature", tempRes.slope)}</p>
-            <p>${interpret("rainfall", rainRes.slope)}</p>
-            <p>${interpret("extremes", extremeRes.slope)}</p>
+            <p>${interpret("temperature",tempRes.slope)}</p>
+            <p>${interpret("rain",rainRes.slope)}</p>
+            <p>${interpret("energy",radRes.slope)}</p>
         `;
 
-    })
-    .catch(err => {
-        alert("Error: " + err.message);
     });
 }
 

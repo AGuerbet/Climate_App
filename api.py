@@ -4,7 +4,6 @@ from climate import get_fast_climate
 
 app = FastAPI()
 
-# ✅ VERY IMPORTANT (fix CORS for Netlify)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
