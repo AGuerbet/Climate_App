@@ -4,9 +4,10 @@
     <title>Climate Trends Explorer</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
 
-<h1>Climate Trends Explorer</h1>
+<body style="background:black;color:white;font-family:sans-serif">
+
+<h1>Climate Trends Explorer (Scientific Mode)</h1>
 
 <label>Latitude:</label>
 <input id="lat" value="24.5">
@@ -19,16 +20,16 @@
 <div id="output"></div>
 
 <canvas id="tempChart"></canvas>
-<canvas id="hydroChart"></canvas>
-<canvas id="energyChart"></canvas>
+<canvas id="rainChart"></canvas>
+<canvas id="extremeChart"></canvas>
 
 <script>
 
-let tempChart, hydroChart, energyChart;
+let tempChart, rainChart, extremeChart;
 
 function linearRegression(x, y) {
     const n = x.length;
-    let sumX=0, sumY=0, sumXY=0, sumXX=0;
+    let sumX=0,sumY=0,sumXY=0,sumXX=0;
 
     for (let i=0;i<n;i++){
         sumX+=x[i];
@@ -37,8 +38,8 @@ function linearRegression(x, y) {
         sumXX+=x[i]*x[i];
     }
 
-    const slope = (n*sumXY - sumX*sumY)/(n*sumXX - sumX*sumX);
-    const intercept = (sumY - slope*sumX)/n;
+    const slope=(n*sumXY - sumX*sumY)/(n*sumXX - sumX*sumX);
+    const intercept=(sumY - slope*sumX)/n;
 
     return {
         slope,
@@ -46,103 +47,77 @@ function linearRegression(x, y) {
     };
 }
 
-function interpret(type, slope){
-
-    if(type==="temperature"){
-        return slope>0
-            ? `🔥 Warming: +${slope.toFixed(4)} °C/year`
-            : `❄️ Cooling: ${slope.toFixed(4)} °C/year`;
-    }
-
-    if(type==="rain"){
-        return slope>0
-            ? `🌧️ Increasing rainfall`
-            : `🏜️ Decreasing rainfall`;
-    }
-
-    if(type==="energy"){
-        return slope>0
-            ? `☀️ Increasing solar energy`
-            : `Decreasing solar energy`;
-    }
-}
-
 function loadData(){
 
-    const lat = document.getElementById("lat").value;
-    const lon = document.getElementById("lon").value;
+    const lat=document.getElementById("lat").value;
+    const lon=document.getElementById("lon").value;
 
     fetch(`https://climate-app-e1fc.onrender.com/climate-fast?lat=${lat}&lon=${lon}`)
     .then(res=>res.json())
     .then(data=>{
 
-        if(!data || !data.temperature_mean){
-            alert("No data returned");
+        if(!data.data){
+            alert("No data");
             return;
         }
 
-        const years = Object.keys(data.temperature_mean).map(Number);
+        const years=data.data.map(d=>d.year);
 
-        const tempMean = Object.values(data.temperature_mean);
-        const tempMax = Object.values(data.temperature_max);
-        const tempMin = Object.values(data.temperature_min);
+        const temp=data.data.map(d=>d.thermal.mean_temp);
+        const tx90p=data.data.map(d=>d.thermal.tx90p);
+        const tn10p=data.data.map(d=>d.thermal.tn10p);
 
-        const rain = Object.values(data.rainfall);
-        const humidity = Object.values(data.humidity);
-        const radiation = Object.values(data.radiation);
+        const rain=data.data.map(d=>d.hydrological.rain_total);
+        const spi=data.data.map(d=>d.hydrological.spi);
+        const r99p=data.data.map(d=>d.hydrological.r99p);
 
-        const tempRes = linearRegression(years,tempMean);
-        const rainRes = linearRegression(years,rain);
-        const radRes = linearRegression(years,radiation);
+        const tempTrend=linearRegression(years,temp);
+        const rainTrend=linearRegression(years,rain);
 
         if(tempChart) tempChart.destroy();
-        if(hydroChart) hydroChart.destroy();
-        if(energyChart) energyChart.destroy();
+        if(rainChart) rainChart.destroy();
+        if(extremeChart) extremeChart.destroy();
 
-        // TEMPERATURE
-        tempChart = new Chart(tempChart = document.getElementById('tempChart'),{
-            type:'line',
+        tempChart=new Chart(document.getElementById("tempChart"),{
+            type:"line",
             data:{
                 labels:years,
                 datasets:[
-                    {label:'Mean',data:tempMean,borderColor:'red'},
-                    {label:'Max',data:tempMax,borderColor:'orange'},
-                    {label:'Min',data:tempMin,borderColor:'blue'},
-                    {label:'Trend',data:tempRes.trend,borderColor:'black',borderWidth:2}
+                    {label:"Mean Temperature",data:temp,borderColor:"red"},
+                    {label:"Trend",data:tempTrend.trend,borderColor:"white",borderWidth:2}
                 ]
             }
         });
 
-        // HYDRO
-        hydroChart = new Chart(document.getElementById('hydroChart'),{
-            type:'line',
+        rainChart=new Chart(document.getElementById("rainChart"),{
+            type:"line",
             data:{
                 labels:years,
                 datasets:[
-                    {label:'Rainfall',data:rain,borderColor:'blue'},
-                    {label:'Humidity',data:humidity,borderColor:'green'},
-                    {label:'Trend',data:rainRes.trend,borderColor:'black',borderWidth:2}
+                    {label:"Total Rainfall",data:rain,borderColor:"blue"},
+                    {label:"Trend",data:rainTrend.trend,borderColor:"white",borderWidth:2}
                 ]
             }
         });
 
-        // ENERGY
-        energyChart = new Chart(document.getElementById('energyChart'),{
-            type:'line',
+        extremeChart=new Chart(document.getElementById("extremeChart"),{
+            type:"line",
             data:{
                 labels:years,
                 datasets:[
-                    {label:'Radiation',data:radiation,borderColor:'gold'},
-                    {label:'Trend',data:radRes.trend,borderColor:'black',borderWidth:2}
+                    {label:"TX90p (hot days %)",data:tx90p,borderColor:"orange"},
+                    {label:"TN10p (cold days %)",data:tn10p,borderColor:"cyan"},
+                    {label:"SPI",data:spi,borderColor:"green"},
+                    {label:"R99p (extreme rainfall)",data:r99p,borderColor:"purple"}
                 ]
             }
         });
 
-        document.getElementById("output").innerHTML = `
-            <h2>Climate Interpretation</h2>
-            <p>${interpret("temperature",tempRes.slope)}</p>
-            <p>${interpret("rain",rainRes.slope)}</p>
-            <p>${interpret("energy",radRes.slope)}</p>
+        document.getElementById("output").innerHTML=`
+            <h2>Scientific Interpretation</h2>
+            <p>🔥 Temperature trend: ${tempTrend.slope.toFixed(4)} °C/year</p>
+            <p>🌧️ Rainfall trend: ${rainTrend.slope.toFixed(2)} mm/year</p>
+            <p>Baseline: ${data.baseline}</p>
         `;
 
     });

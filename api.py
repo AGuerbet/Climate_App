@@ -14,7 +14,7 @@ app.add_middleware(
 
 @app.get("/")
 def home():
-    return {"message": "Climate API is running"}
+    return {"message": "Climate API running (scientific mode)"}
 
 @app.get("/climate-fast")
 def climate_fast(lat: float, lon: float):

@@ -1,60 +1,80 @@
 import requests
 import pandas as pd
+import numpy as np
 from datetime import datetime
 
 def get_fast_climate(lat, lon):
 
     end_date = datetime.today().strftime('%Y-%m-%d')
 
-    # ---- CORE VARIABLES (ALWAYS WORK) ----
-    url_core = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date=1995-01-01&end_date={end_date}&daily=temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto"
+    url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date=1995-01-01&end_date={end_date}&daily=temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto"
 
-    core = requests.get(url_core).json()
+    data = requests.get(url).json()
 
-    if "daily" not in core or core["daily"] is None:
-        return {"error": "Core data unavailable"}
+    if "daily" not in data or data["daily"] is None:
+        return {"error": "No data returned"}
 
-    df = pd.DataFrame(core["daily"])
-
-    # ---- SECONDARY VARIABLES (TRY / OPTIONAL) ----
-    url_extra = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date=1995-01-01&end_date={end_date}&daily=relative_humidity_2m,shortwave_radiation_sum&timezone=auto"
-
-    extra = requests.get(url_extra).json()
-
-    if "daily" in extra and extra["daily"] is not None:
-        df_extra = pd.DataFrame(extra["daily"])
-        df["humidity"] = df_extra.get("relative_humidity_2m", None)
-        df["radiation"] = df_extra.get("shortwave_radiation_sum", None)
-    else:
-        df["humidity"] = None
-        df["radiation"] = None
-
-    # ---- TIME ----
+    df = pd.DataFrame(data["daily"])
     df["time"] = pd.to_datetime(df["time"])
     df["year"] = df["time"].dt.year
 
-    # ---- AGGREGATION ----
-    temp_mean = df.groupby("year")["temperature_2m_mean"].mean()
-    temp_max = df.groupby("year")["temperature_2m_max"].mean()
-    temp_min = df.groupby("year")["temperature_2m_min"].mean()
+    # ❗ REMOVE CURRENT YEAR (scientific consistency)
+    current_year = datetime.today().year
+    df = df[df["year"] < current_year]
 
-    rainfall = df.groupby("year")["precipitation_sum"].sum()
+    # --------------------------
+    # BASELINE (1995–2024)
+    # --------------------------
+    baseline = df[(df["year"] >= 1995) & (df["year"] <= 2024)]
 
-    humidity = df.groupby("year")["humidity"].mean()
-    radiation = df.groupby("year")["radiation"].sum()
+    # Temperature thresholds
+    tx90 = np.percentile(baseline["temperature_2m_max"], 90)
+    tn10 = np.percentile(baseline["temperature_2m_min"], 10)
 
-    # ---- EXTREMES ----
-    df["hot_day"] = df["temperature_2m_max"] > 35
-    hot_days = df.groupby("year")["hot_day"].sum()
+    # Rain thresholds
+    r95 = np.percentile(baseline["precipitation_sum"], 95)
+    r99 = np.percentile(baseline["precipitation_sum"], 99)
+
+    # SPI baseline (annual totals)
+    annual_rain = baseline.groupby("year")["precipitation_sum"].sum()
+    rain_mean = annual_rain.mean()
+    rain_std = annual_rain.std()
+
+    results = []
+
+    for year, g in df.groupby("year"):
+
+        # ---- THERMAL ----
+        mean_temp = g["temperature_2m_mean"].mean()
+        tx90p = (g["temperature_2m_max"] > tx90).mean() * 100
+        tn10p = (g["temperature_2m_min"] < tn10).mean() * 100
+
+        # ---- HYDRO ----
+        rain_total = g["precipitation_sum"].sum()
+
+        spi = (rain_total - rain_mean) / rain_std if rain_std != 0 else 0
+
+        r95p = g[g["precipitation_sum"] > r95]["precipitation_sum"].sum()
+        r99p = g[g["precipitation_sum"] > r99]["precipitation_sum"].sum()
+
+        results.append({
+            "year": int(year),
+            "thermal": {
+                "mean_temp": float(mean_temp),
+                "tx90p": float(tx90p),
+                "tn10p": float(tn10p)
+            },
+            "hydrological": {
+                "rain_total": float(rain_total),
+                "spi": float(spi),
+                "r95p": float(r95p),
+                "r99p": float(r99p)
+            }
+        })
 
     return {
-        "temperature_mean": temp_mean.to_dict(),
-        "temperature_max": temp_max.to_dict(),
-        "temperature_min": temp_min.to_dict(),
-        "rainfall": rainfall.to_dict(),
-        "humidity": humidity.fillna(0).to_dict(),
-        "radiation": radiation.fillna(0).to_dict(),
-        "hot_days": hot_days.to_dict(),
-        "source": "Open-Meteo (ERA5 reanalysis)",
-        "last_updated": end_date
+        "data": results,
+        "baseline": "1995-2024",
+        "mode": "scientific (complete years only)",
+        "source": "Open-Meteo (ERA5 reanalysis)"
     }
