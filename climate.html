@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Climate Trends</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+    background: black;
+    color: white;
+    font-family: "Times New Roman", serif;
+    margin: 0;
+    padding: 40px;
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+h1 {
+    text-align: center;
+    font-weight: normal;
+    margin-bottom: 5px;
+    letter-spacing: 1px;
+}
+
+h2 {
+    text-align: center;
+    font-weight: normal;
+    margin-top: 0;
+    margin-bottom: 30px;
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.description {
+    text-align: center;
+    max-width: 700px;
+    margin: auto;
+    line-height: 1.6;
+    margin-bottom: 40px;
+}
+
+.controls {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid white;
+    color: white;
+    margin: 0 10px;
+    padding: 5px;
+    width: 120px;
+}
+
+button {
+    background: transparent;
+    border: 1px solid white;
+    color: white;
+    padding: 6px 16px;
+    margin-left: 10px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: white;
+    color: black;
+}
+
+.section {
+    margin-top: 60px;
+}
+
+.section-title {
+    font-size: 18px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid white;
+    padding-bottom: 5px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+}
+
+canvas {
+    width: 100% !important;
+    height: 220px !important;
+}
+
+#output {
+    text-align: center;
+    margin-top: 40px;
+    line-height: 1.8;
+}
+</style>
+</head>
+
+<body>
+
+<h1>FAULT//LINE ECHOES</h1>
+<h2>Climate Trends Explorer</h2>
+
+<div class="description">
+This interface explores long-term climatic changes using standardized indicators derived from reanalysis data.
+Thermal regime captures average conditions and temperature extremes, while hydrological stress reflects total rainfall,
+drought intensity (SPI), and the contribution of extreme precipitation events. Additional indicators quantify changes
+in cloud cover and incoming solar radiation. Each variable is computed annually and compared against a 1980–2024 baseline
+to detect directional trends over time.
+</div>
+
+<div class="controls">
+    Latitude <input id="lat">
+    Longitude <input id="lon">
+    <button onclick="loadData()">Run</button>
+</div>
+
+<div id="output"></div>
+
+<div class="section">
+    <div class="section-title">Thermal Regime</div>
+    <div class="grid">
+        <canvas id="tempChart"></canvas>
+        <canvas id="txChart"></canvas>
+        <canvas id="tnChart"></canvas>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Hydrological Stress</div>
+    <div class="grid">
+        <canvas id="rainChart"></canvas>
+        <canvas id="spiChart"></canvas>
+        <canvas id="extremeChart"></canvas>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-title">Cloud & Radiation Regime</div>
+    <div class="grid">
+        <canvas id="cloudChart"></canvas>
+        <canvas id="ssrdAnnualChart"></canvas>
+        <canvas id="cloudVarChart"></canvas>
+    </div>
+</div>
+
+<script>
+
+let charts = {};
+
+function regression(x, y){
+    const n = x.length;
+    let sumX=0,sumY=0,sumXY=0,sumXX=0;
+
+    for (let i=0;i<n;i++){
+        sumX+=x[i];
+        sumY+=y[i];
+        sumXY+=x[i]*y[i];
+        sumXX+=x[i]*x[i];
+    }
+
+    const slope=(n*sumXY - sumX*sumY)/(n*sumXX - sumX*sumX);
+    const intercept=(sumY - slope*sumX)/n;
+
+    return {
+        slope,
+        line: x.map(xi => slope*xi + intercept)
+    };
+}
+
+function createChart(id, title, yLabel, data){
+
+    if(charts[id]) charts[id].destroy();
+
+    const reg = regression(window.years, data);
+
+    charts[id] = new Chart(document.getElementById(id), {
+        type: 'line',
+        data: {
+            labels: window.years,
+            datasets: [
+                {
+                    data: data,
+                    borderColor: "white",
+                    borderWidth: 1.2,
+                    pointRadius: 0
+                },
+                {
+                    data: reg.line,
+                    borderColor: "white",
+                    borderWidth: 2,
+                    borderDash: [5,5],
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: title,
+                    color: "white",
+                    font: { size: 13 }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: "white" },
+                    grid: { color: "#222" }
+                },
+                y: {
+                    ticks: { color: "white" },
+                    grid: { color: "#222" },
+                    title: {
+                        display: true,
+                        text: yLabel,
+                        color: "white"
+                    }
+                }
+            }
+        }
+    });
+
+    return reg.slope;
+}
+
+function loadData(){
+
+    const lat=document.getElementById("lat").value;
+    const lon=document.getElementById("lon").value;
+
+    if(!lat || !lon){
+        alert("Enter coordinates");
+        return;
+    }
+
+    fetch(`https://climate-app-e1fc.onrender.com/climate-fast?lat=${lat}&lon=${lon}`)
+    .then(res=>res.json())
+    .then(data=>{
+
+        const years=data.data.map(d=>d.year);
+        window.years = years;
+
+        const temp=data.data.map(d=>d.thermal.mean_temp);
+        const tx90p=data.data.map(d=>d.thermal.tx90p);
+        const tn10p=data.data.map(d=>d.thermal.tn10p);
+
+        const rain=data.data.map(d=>d.hydrological.rain_total);
+        const spi=data.data.map(d=>d.hydrological.spi);
+        const r95p = data.data.map(d => d.hydrological.r95p);
+
+        const cloud = data.data.map(d => d.cloud_radiation?.cloud_cover_mean ?? null);
+        const ssrdAnnual = data.data.map(d => d.cloud_radiation?.ssrd_annual ?? null);
+        const cloudVariability = data.data.map(d => d.cloud_radiation?.cloud_variability ?? null);
+        
+
+        // CREATE CHARTS + GET TRENDS
+        const t1 = createChart("tempChart","Mean Temperature","°C",temp);
+        const t2 = createChart("txChart","TX90p (Hot Days)","%",tx90p);
+        const t3 = createChart("tnChart","TN10p (Cold Days)","%",tn10p);
+
+        const h1 = createChart("rainChart","Total Rainfall","mm/year",rain);
+        const h2 = createChart("spiChart","SPI","index",spi);
+        const h3 = createChart("extremeChart","R95p (Extreme Rainfall)","mm",r95p);
+
+        const c1 = createChart("cloudChart","Mean Cloud Cover","%",cloud);
+        const c2 = createChart("ssrdAnnualChart","Annual Solar Radiation","MJ/m²/year",ssrdAnnual);
+        const c3 = createChart("cloudVarChart","Cloud Cover Variability","%",cloudVariability);
+
+       document.getElementById("output").innerHTML = `
+    <b>Trend Interpretation</b><br><br>
+
+    Mean temperature:
+    ${t1.toFixed(4)} °C/year<br>
+
+    Hot extremes (TX90p):
+    ${t2.toFixed(4)} %/year<br>
+
+    Cold extremes (TN10p):
+    ${t3.toFixed(4)} %/year<br><br>
+
+    Total rainfall:
+    ${h1.toFixed(2)} mm/year<br>
+
+    SPI (drought/wetness):
+    ${h2.toFixed(4)} /year<br>
+
+    Extreme rainfall (R95p):
+    ${h3.toFixed(2)} mm/year<br><br>
+
+    Cloud cover:
+    ${c1.toFixed(4)} %/year<br>
+
+    Annual solar radiation:
+    ${c2.toFixed(2)} MJ/m²/year/year<br>
+
+    Cloud variability:
+    ${c3.toFixed(4)} %/year<br><br>
+
+    Baseline:
+    ${data.baseline}<br>
+
+    Period:
+    ${data.period}
+`;
+
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Error loading climate data");
+    });
+}
+
+</script>
+
+</body>
+</html>
